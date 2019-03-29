@@ -425,7 +425,7 @@ func TestRediStore(t *testing.T) {
 func TestPingGoodPort(t *testing.T) {
 	store, _ := NewRediStore(10, "tcp", ":6379", "", []byte("secret-key"))
 	defer store.Close()
-	ok, err := store.ping()
+	ok, err := store.PingRedis()
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -437,7 +437,7 @@ func TestPingGoodPort(t *testing.T) {
 func TestPingBadPort(t *testing.T) {
 	store, _ := NewRediStore(10, "tcp", ":6378", "", []byte("secret-key"))
 	defer store.Close()
-	_, err := store.ping()
+	_, err := store.PingRedis()
 	if err == nil {
 		t.Error("Expected error")
 	}

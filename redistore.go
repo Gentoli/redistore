@@ -210,7 +210,7 @@ func NewRediStoreWithPool(pool *redis.Pool, keyPairs ...[]byte) (*RediStore, err
 		keyPrefix:     "session_",
 		serializer:    GobSerializer{},
 	}
-	_, err := rs.ping()
+	_, err := rs.PingRedis()
 	return rs, err
 }
 
@@ -242,7 +242,7 @@ func (s *RediStore) New(r *http.Request, name string) (*sessions.Session, error)
 	if c, errCookie := r.Cookie(name); errCookie == nil {
 		err = securecookie.DecodeMulti(name, c.Value, &session.ID, s.Codecs...)
 		if err == nil {
-			ok, err = s.load(session)
+			ok, err = s.LoadRedis(session)
 			session.IsNew = !(err == nil && ok) // not new if no error and data available
 		}
 	}
@@ -253,7 +253,7 @@ func (s *RediStore) New(r *http.Request, name string) (*sessions.Session, error)
 func (s *RediStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
 	// Marked for deletion.
 	if session.Options.MaxAge <= 0 {
-		if err := s.delete(session); err != nil {
+		if err := s.DeleteRedis(session); err != nil {
 			return err
 		}
 		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))
@@ -262,7 +262,7 @@ func (s *RediStore) Save(r *http.Request, w http.ResponseWriter, session *sessio
 		if session.ID == "" {
 			session.ID = strings.TrimRight(base32.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(32)), "=")
 		}
-		if err := s.save(session); err != nil {
+		if err := s.SaveRedis(session); err != nil {
 			return err
 		}
 		encoded, err := securecookie.EncodeMulti(session.Name(), session.ID, s.Codecs...)
@@ -295,8 +295,8 @@ func (s *RediStore) Delete(r *http.Request, w http.ResponseWriter, session *sess
 	return nil
 }
 
-// ping does an internal ping against a server to check if it is alive.
-func (s *RediStore) ping() (bool, error) {
+// PingRedis does an internal PingRedis against a server to check if it is alive.
+func (s *RediStore) PingRedis() (bool, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 	data, err := conn.Do("PING")
@@ -306,8 +306,8 @@ func (s *RediStore) ping() (bool, error) {
 	return (data == "PONG"), nil
 }
 
-// save stores the session in redis.
-func (s *RediStore) save(session *sessions.Session) error {
+// SaveRedis stores the session in redis.
+func (s *RediStore) SaveRedis(session *sessions.Session) error {
 	b, err := s.serializer.Serialize(session)
 	if err != nil {
 		return err
@@ -328,9 +328,9 @@ func (s *RediStore) save(session *sessions.Session) error {
 	return err
 }
 
-// load reads the session from redis.
+// LoadRedis reads the session from redis.
 // returns true if there is a sessoin data in DB
-func (s *RediStore) load(session *sessions.Session) (bool, error) {
+func (s *RediStore) LoadRedis(session *sessions.Session) (bool, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 	if err := conn.Err(); err != nil {
@@ -350,8 +350,8 @@ func (s *RediStore) load(session *sessions.Session) (bool, error) {
 	return true, s.serializer.Deserialize(b, session)
 }
 
-// delete removes keys from redis if MaxAge<0
-func (s *RediStore) delete(session *sessions.Session) error {
+// DeleteRedis removes keys from redis if MaxAge<0
+func (s *RediStore) DeleteRedis(session *sessions.Session) error {
 	conn := s.Pool.Get()
 	defer conn.Close()
 	if _, err := conn.Do("DEL", s.keyPrefix+session.ID); err != nil {
